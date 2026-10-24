@@ -10,7 +10,7 @@ color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1d22;--panel:#2a2c34;--text:#eceef4;--muted:#9aa1b3;--line:#3d4150;--accent:#7c9bff;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#1c1d22;--panel:#2a2c34;--text:#eceef4;--muted:#9aa1b3;--line:#3d4150;--accent:#7c9bff;color-scheme:dark}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+body{-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
 .bar{display:flex;gap:6px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;align-items:center}
 .bar>*{flex:0 0 auto}
 button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:6px 10px;white-space:nowrap}
@@ -41,9 +41,12 @@ canvas{background:#fff;border-radius:4px;box-shadow:0 1px 6px rgba(0,0,0,.25);to
   <button id="rl">⟲ 왼쪽 회전</button><button id="rr">⟳ 오른쪽 회전</button>
   <button id="cp">📄 복사</button><button id="del" class="danger">🗑 삭제</button>
   <div class="sep"></div>
+  <button id="save">💾 저장</button><button id="open">📂 열기</button><input type="file" id="file" accept="image/*" hidden>
+  <div class="sep"></div>
   <button id="undo">↶ 되돌리기</button><button id="clr" class="danger">모두 지우기</button>
 </div>
 <div id="wrap"><canvas id="cv" width="1500" height="940"></canvas></div>
+<div id="dlg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:9"><div style="background:var(--panel);padding:18px;border-radius:12px;min-width:300px;max-width:90vw"><div style="font-weight:700;margin-bottom:10px">그림 저장</div><label style="display:block;margin-bottom:12px">파일 이름<input id="fname" style="width:100%;font:inherit;padding:8px;margin-top:4px;box-sizing:border-box;-webkit-user-select:text;user-select:text"></label><div style="display:flex;gap:8px;justify-content:flex-end"><button id="fok">저장</button><button id="fno">취소</button></div></div></div>
 <div id="hint">도형 버튼을 누르고 끌어서 그려요. 그린 직후에는 이동·크기·회전·복사를 할 수 있고, 빈 곳을 클릭하면 도형이 고정돼요. 곡선은 끌어서 선을 그린 뒤 주황색 점을 끌어 휘어 보세요. 🪣 페인트통으로 겹쳐진 칸을 하나씩 색칠하세요. 눈·이모티콘은 🧽 지우개로 클릭하면 지워지고, 🖱 이동으로 다시 눌러 움직일 수도 있어요.</div>
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id),W=cv.width,H=cv.height;
@@ -51,7 +54,7 @@ const bmp=document.createElement('canvas');bmp.width=W;bmp.height=H;const bx=bmp
 bx.fillStyle='#fff';bx.fillRect(0,0,W,H);
 const TOOLS=[['select','🖱 이동'],['rect','▭ 사각형'],['round','▢ 둥근 사각형'],['circle','◯ 원'],['tri','△ 삼각형'],['heart','♥ 하트'],['star','★ 별'],['line','╱ 직선'],['curve','⌒ 곡선'],['pen','✏ 연필'],['bucket','🪣 페인트통'],['eraser','🧽 지우개']];
 const SH=['rect','round','circle','ellipse','tri','heart','star','line'];
-let tool='rect',act=null,undo=[],clip=null,drag=null,stk=[];
+let tool='rect',act=null,undo=[],clip=null,drag=null,stk=[],strokes=new Set();
 TOOLS.forEach(([k,n])=>{const b=document.createElement('button');b.textContent=n;b.dataset.k=k;b.onclick=()=>setTool(k);$('tools').appendChild(b)});
 function setTool(k){tool=k;document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.k===k));if(k==='bucket'||k==='pen'||k==='eraser')commit();draw()}
 setTool('rect');
@@ -59,7 +62,7 @@ setTool('rect');
   b.onclick=()=>{commit();act={t:'emo',ch,cx:W/2,cy:H/2,w:120,h:120,rot:0,stroke:'#000',lw:1};setTool('select');draw()};$('emo').appendChild(b)});
 [['eye','눈 1',110,130],['eye2','눈 2',100,130]].forEach(([t,n,w,h])=>{const b=document.createElement('button');b.textContent='◉ '+n;b.style.fontSize='14px';b.onclick=()=>{commit();act={t,cx:W/2,cy:H/2,w,h,rot:0,stroke:'#1d2330',lw:4};setTool('select');draw()};$('emo').appendChild(b)});
 ['#ff6b6b','#ffa94d','#ffe066','#69db7c','#4dabf7','#9775fa','#f783ac','#8b5a2b','#ffffff','#495057'].forEach(c=>{const i=document.createElement('i');i.style.background=c;i.onclick=()=>{$('paint').value=c};$('sw').appendChild(i)});
-$('stroke').oninput=$('lw').oninput=()=>{if(act&&act.t!=='emo'){act.stroke=$('stroke').value;act.lw=+$('lw').value;draw()}};
+$('stroke').oninput=$('lw').oninput=()=>{if(act&&act.t!=='emo'){if(Date.now()-lastProp>800)ahPush();lastProp=Date.now();act.stroke=$('stroke').value;act.lw=+$('lw').value;draw()}};
 
 function fit(){const w=$('wrap'),s=Math.min((w.clientWidth-16)/W,(w.clientHeight-16)/H);cv.style.width=W*s+'px';cv.style.height=H*s+'px'}
 new ResizeObserver(fit).observe($('wrap'));fit();
@@ -97,17 +100,21 @@ function draw(){
   const t=world(act,0,-.5),r=world(act,0,-.5-34/act.h);ctx.beginPath();ctx.moveTo(...t);ctx.lineTo(...r);ctx.stroke();ctx.setLineDash([]);
   handles(act).forEach((p,i)=>{ctx.beginPath();if(i===4)ctx.arc(p[0],p[1],9,0,7);else ctx.rect(p[0]-7,p[1]-7,14,14);ctx.fill();ctx.stroke()});ctx.restore();
 }
-function snap(){const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d').drawImage(bmp,0,0);undo.push({c,s:JSON.stringify(stk)});if(undo.length>12)undo.shift()}
-function commit(){if(!act)return;snap();if(['emo','eye','eye2'].includes(act.t))stk.push(act);else render(bx,act);act=null;draw()}
+function snap(){const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d').drawImage(bmp,0,0);undo.push({c,s:JSON.stringify(stk),a:JSON.stringify(act)});if(undo.length>8)undo.shift()}
+function commit(){if(!act)return;snap();if(['emo','eye','eye2'].includes(act.t))stk.push(act);else{render(bx,act);strokes.add(act.stroke)}act=null;draw()}
 function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]}
 
 // ---- 페인트통 (겹쳐진 칸 채우기) ----
+function seedFor(d,x,y,sc){ // 선 근처를 눌러도 가장 가까운 빈 칸을 찾아서 칠해요
+  const dd=i=>Math.abs(d[i]-sc[0])+Math.abs(d[i+1]-sc[1])+Math.abs(d[i+2]-sc[2]);
+  const flat=(a,b)=>{const i=(b*W+a)*4,same=j=>Math.abs(d[i]-d[j])+Math.abs(d[i+1]-d[j+1])+Math.abs(d[i+2]-d[j+2])<=60;for(const[ex,ey]of[[1,0],[0,1]]){let n=1;for(const s of[1,-1])for(let k=1;k<=12;k++){const aa=a+ex*k*s,bb=b+ey*k*s;if(aa<0||bb<0||aa>=W||bb>=H||!same((bb*W+aa)*4))break;n++}if(n<10)return false}return true};
+  for(let r=0;r<=16;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;const a=x+dx,b=y+dy;if(a>0&&b>0&&a<W-1&&b<H-1&&flat(a,b))return[a,b]}return null}
 function flood(x,y,hex){
-  x|=0;y|=0;const id=bx.getImageData(0,0,W,H),d=id.data,i0=(y*W+x)*4,r0=d[i0],g0=d[i0+1],b0=d[i0+2];
-  const n=parseInt(hex.slice(1),16),fr=n>>16,fg=n>>8&255,fb=n&255,TOL=250;
-  const sc=parseInt($('stroke').value.slice(1),16);
+  x|=0;y|=0;const id=bx.getImageData(0,0,W,H),d=id.data;
+  const n=parseInt(hex.slice(1),16),fr=n>>16,fg=n>>8&255,fb=n&255,sn=parseInt($('stroke').value.slice(1),16),sc=[sn>>16,sn>>8&255,sn&255];const s=seedFor(d,x,y,sc);if(!s)return;x=s[0];y=s[1];const i0=(y*W+x)*4,r0=d[i0],g0=d[i0+1],b0=d[i0+2];let md=765;[...strokes,$('stroke').value].forEach(h=>{const v=parseInt(h.slice(1),16);md=Math.min(md,Math.abs(r0-(v>>16))+Math.abs(g0-(v>>8&255))+Math.abs(b0-(v&255)))});const TOL=Math.max(40,Math.min(250,md*.45));
+  
   if(Math.abs(r0-fr)+Math.abs(g0-fg)+Math.abs(b0-fb)<10)return;
-  if(Math.abs(r0-(sc>>16))+Math.abs(g0-(sc>>8&255))+Math.abs(b0-(sc&255))<90)return; // 선 위를 누르면 무시
+  
   const ok=i=>Math.abs(d[i]-r0)+Math.abs(d[i+1]-g0)+Math.abs(d[i+2]-b0)<=TOL,seen=new Uint8Array(W*H),st=[x,y];snap();
   while(st.length){const yy=st.pop(),xx=st.pop();let l=xx;
     while(l>=0&&!seen[yy*W+l]&&ok((yy*W+l)*4))l--;l++;let u=false,v=false;
@@ -120,7 +127,7 @@ function flood(x,y,hex){
 
 // ---- 마우스 ----
 cv.addEventListener('pointerdown',e=>{
-  cv.setPointerCapture(e.pointerId);const[x,y]=pos(e);
+  if(e.button!==0)return;e.preventDefault();drag=null;cv.setPointerCapture(e.pointerId);const[x,y]=pos(e);
   if(act&&act.t==='curve'&&tool==='select'){const i=act.k.findIndex(p=>Math.hypot(p[0]-x,p[1]-y)<18);if(i>=0){drag={m:'cpt',i};return}if(nearCurve(x,y)){drag={m:'cmove',lx:x,ly:y};return}}
   if(act&&act.t!=='curve'&&tool==='select'){
     const h=handles(act).findIndex(p=>Math.hypot(p[0]-x,p[1]-y)<14);
@@ -135,11 +142,11 @@ cv.addEventListener('pointerdown',e=>{
   commit();
   if(tool==='bucket'){flood(x,y,$('paint').value);draw();return}
   if(tool==='eraser'){const s=hitStk(x,y);if(s){snap();stk.splice(stk.indexOf(s),1)}}
-  snap();bx.lineCap=bx.lineJoin='round';bx.strokeStyle=tool==='eraser'?'#fff':$('stroke').value;bx.lineWidth=tool==='eraser'?+$('lw').value*4:+$('lw').value;
+  strokes.add($('stroke').value);snap();bx.lineCap=bx.lineJoin='round';bx.strokeStyle=tool==='eraser'?'#fff':$('stroke').value;bx.lineWidth=tool==='eraser'?+$('lw').value*4:+$('lw').value;
   bx.beginPath();bx.moveTo(x,y);bx.lineTo(x+.01,y);bx.stroke();drag={m:'pen',lx:x,ly:y};draw();
 });
 cv.addEventListener('pointermove',e=>{
-  const[x,y]=pos(e);if(!drag){hover(x,y);return}
+  const[x,y]=pos(e);if(drag&&!e.buttons){up();return}if(!drag){hover(x,y);return}if(!drag.p&&act&&['move','rot','size','cpt','cmove'].includes(drag.m)){ahPush();drag.p=1}
   if(drag.m==='pen'){if(tool==='eraser'){const s=hitStk(x,y);if(s)stk.splice(stk.indexOf(s),1)}bx.beginPath();bx.moveTo(drag.lx,drag.ly);bx.lineTo(x,y);bx.stroke();drag.lx=x;drag.ly=y}
   else if(drag.m==='move'){act.cx=x+drag.dx;act.cy=y+drag.dy}
   else if(drag.m==='cpt'){act.k[drag.i]=[x,y]}
@@ -163,7 +170,7 @@ const up=()=>{if(!drag)return;
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 
 // ---- 버튼 ----
-const rotBy=d=>{if(!act)return;const r=d*Math.PI/180;if(act.t==='curve'){const E=act.k[4],cx=(act.k[0][0]+E[0])/2,cy=(act.k[0][1]+E[1])/2,c=Math.cos(r),s=Math.sin(r);act.k=act.k.map(p=>[cx+(p[0]-cx)*c-(p[1]-cy)*s,cy+(p[0]-cx)*s+(p[1]-cy)*c])}else act.rot+=r;draw()};
+const rotBy=d=>{if(!act)return;ahPush();const r=d*Math.PI/180;if(act.t==='curve'){const E=act.k[4],cx=(act.k[0][0]+E[0])/2,cy=(act.k[0][1]+E[1])/2,c=Math.cos(r),s=Math.sin(r);act.k=act.k.map(p=>[cx+(p[0]-cx)*c-(p[1]-cy)*s,cy+(p[0]-cx)*s+(p[1]-cy)*c])}else act.rot+=r;draw()};
 function nearCurve(x,y){return cr(act.k).some(p=>Math.hypot(p[0]-x,p[1]-y)<16)}
 $('rl').onclick=()=>rotBy(-15);$('rr').onclick=()=>rotBy(15);
 const ROT='url("data:image/svg+xml,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><path d='M12 4a8 8 0 1 1-7.5 5.2' fill='none' stroke='black' stroke-width='2.5'/><path d='M2 5l3 6 5-4z' fill='black'/></svg>")+'") 12 12, grab';
@@ -186,14 +193,31 @@ function drawEye(c,o){const rw=o.w/2,rh=o.h/2,r=Math.min(rw,rh)*.72;c.lineWidth=
   c.fillStyle='#5b8def';c.beginPath();c.arc(0,0,r,0,7);c.fill();
   c.fillStyle='#1d2330';c.beginPath();c.arc(0,0,r*.5,0,7);c.fill();
   c.fillStyle='#fff';[-1,1].forEach(s=>{c.beginPath();c.arc(s*r*.38,-r*.38,r*.2,0,7);c.fill()})}
+['dragstart','selectstart','contextmenu'].forEach(t=>document.addEventListener(t,e=>{if(e.target.tagName!=='INPUT')e.preventDefault()}));
+async function saveImg(){commit();const b=await new Promise(r=>{const c=document.createElement('canvas');c.width=W;c.height=H;const t=c.getContext('2d');t.drawImage(bmp,0,0);stk.forEach(o=>render(t,o));c.toBlob(r,'image/png')});
+  let name='내그림_'+new Date().toISOString().slice(0,10)+'.png';if(window.showSaveFilePicker){try{const h=await showSaveFilePicker({suggestedName:name,types:[{description:'PNG 그림',accept:{'image/png':['.png']}}]});const w=await h.createWritable();await w.write(b);await w.close();return}catch(e){if(e&&e.name==='AbortError')return}}
+  name=await askName(name);if(!name)return;let d=null;try{d=window.claude&&claude.use?await claude.use('downloads'):null}catch(e){}
+  if(d){try{await d.save({filename:name,data:b})}catch(e){}}
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}}
+$('save').onclick=saveImg;$('open').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const img=new Image();
+  img.onload=()=>{act=null;snap();stk=[];bx.fillStyle='#fff';bx.fillRect(0,0,W,H);const s=Math.min(W/img.width,H/img.height,1),w=img.width*s,h=img.height*s;bx.drawImage(img,(W-w)/2,(H-h)/2,w,h);URL.revokeObjectURL(img.src);draw()};img.src=URL.createObjectURL(f)};
+addEventListener('blur',()=>up());
+let ah=[],ahObj=null,lastProp=0;
+function ahPush(){if(!act)return;if(ahObj!==act){ah=[];ahObj=act}ah.push(JSON.stringify(act));if(ah.length>30)ah.shift()}
+function askName(def){return new Promise(res=>{const dl=$('dlg'),f=$('fname');f.value=def.replace('.png','');dl.style.display='flex';f.focus();f.select();
+  const done=v=>{dl.style.display='none';f.onkeydown=null;res(v)};
+  $('fok').onclick=()=>{const v=[...f.value.trim()].filter(c=>!'/:*?<>|"'.includes(c)&&c.charCodeAt(0)!==92).join('');done(v?v+'.png':null)};$('fno').onclick=()=>done(null);
+  f.onkeydown=e=>{if(e.key==='Enter')$('fok').onclick();if(e.key==='Escape')done(null)}})}
 function dupe(src){const n=JSON.parse(JSON.stringify(src));if(n.k)n.k.forEach(p=>{p[0]+=28;p[1]+=28});else{n.cx+=28;n.cy+=28}return n}
 $('cp').onclick=()=>{if(act){const n=dupe(act);commit();act=n;draw()}};
 function del(){if(act){act=null;draw()}}
 $('del').onclick=del;
-function back(){if(act){act=null}else if(undo.length){const u=undo.pop();bx.drawImage(u.c,0,0);stk=JSON.parse(u.s)}draw()}
+function back(){if(act){if(ahObj===act&&ah.length){act=JSON.parse(ah.pop());ahObj=act}else act=null}
+  else if(undo.length){const u=undo.pop();bx.drawImage(u.c,0,0);stk=JSON.parse(u.s);act=u.a&&u.a!=='null'?JSON.parse(u.a):null;ahObj=act;ah=[];if(act&&tool!=='select')setTool('select')}draw()}
 $('undo').onclick=back;
 $('clr').onclick=()=>{act=null;snap();stk=[];bx.fillStyle='#fff';bx.fillRect(0,0,W,H);draw()};
-addEventListener('keydown',e=>{const m=e.ctrlKey||e.metaKey;
+addEventListener('keydown',e=>{const m=e.ctrlKey||e.metaKey;if(m&&e.key==='a')e.preventDefault();
   if(e.key==='Delete'||e.key==='Backspace')del();
   else if(e.key==='Enter')commit();
   else if(m&&e.key==='z')back();
